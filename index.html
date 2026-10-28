@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>Собеседование: планировщик задач</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky timer bar on top, then single column of phase cards; scoring panel at the end */
+:root {
+  --bg: #f5f6f4;
+  --surface: #ffffff;
+  --fg: #1d2421;
+  --muted: #5d6963;
+  --line: #d9dfdb;
+  --accent: #1f6b57;
+  --accent-soft: #e2f0eb;
+  --good: #1f7a3d;
+  --warn: #a8670b;
+  --bad: #b3362b;
+  --bad-soft: #f8e4e1;
+  --warn-soft: #fbefd9;
+  --font-body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121614; --surface: #1a201d; --fg: #e3e8e5; --muted: #95a29b; --line: #2d3632;
+  --accent: #5cc3a3; --accent-soft: #1d332b; --good: #5ccb7f; --warn: #e3a64a; --bad: #ef7a6e;
+  --bad-soft: #3a211e; --warn-soft: #362a16; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121614; --surface: #1a201d; --fg: #e3e8e5; --muted: #95a29b; --line: #2d3632;
+  --accent: #5cc3a3; --accent-soft: #1d332b; --good: #5ccb7f; --warn: #e3a64a; --bad: #ef7a6e;
+  --bad-soft: #3a211e; --warn-soft: #362a16; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 920px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* Timer bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar .wrap { padding-block: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.clock { font-family: var(--font-mono); font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 92px; }
+.clock.over { color: var(--bad); }
+.now { flex: 1 1 220px; min-width: 0; }
+.now b { display: block; font-size: 14px; }
+.now span { font-size: 13px; color: var(--muted); }
+.btns { display: flex; gap: 6px; }
+button { font: inherit; font-size: 13px; font-weight: 500; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, textarea:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button.danger { color: var(--bad); border-color: var(--bad); }
+.track { display: flex; height: 6px; gap: 2px; flex-basis: 100%; }
+.track div { position: relative; background: var(--line); border-radius: 2px; overflow: hidden; }
+.track i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); }
+
+h1 { font-size: 22px; margin: 22px 0 4px; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 10px; }
+
+/* Task text */
+.task { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.task p { margin: 0 0 8px; }
+.task ul { margin: 0 0 8px; padding-left: 20px; }
+.task .row { display: flex; justify-content: flex-end; }
+
+/* Numbers */
+.nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.num { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.num code { font-family: var(--font-mono); font-size: 13px; display: block; color: var(--muted); }
+.num b { font-family: var(--font-mono); font-size: 17px; font-variant-numeric: tabular-nums; }
+.num span { display: block; font-size: 13px; margin-top: 2px; }
+
+/* Phases */
+.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; }
+.phase.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.phase header { display: flex; gap: 12px; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.phase .t { font-family: var(--font-mono); font-size: 13px; color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+.phase h3 { margin: 0; font-size: 16px; }
+.phase .goal { color: var(--muted); font-size: 13px; flex-basis: 100%; }
+.q { display: grid; grid-template-columns: 22px 1fr; gap: 4px 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.q:last-child { border-bottom: 0; }
+.q input { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--accent); }
+.q .body { min-width: 0; }
+.q .ask { font-weight: 600; }
+.q.done .ask { color: var(--muted); text-decoration: line-through; }
+.q dl { margin: 6px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 14px; }
+.q dt { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; padding-top: 3px; white-space: nowrap; }
+.q dd { margin: 0; min-width: 0; }
+dt.ok { color: var(--good); } dt.no { color: var(--bad); } dt.hint { color: var(--warn); }
+.pick { font-size: 12px; color: var(--muted); font-weight: 400; }
+
+/* Scoring */
+.score { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.crit { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.crit .name { font-weight: 600; }
+.crit .desc { font-size: 13px; color: var(--muted); }
+.crit .key { font-size: 11px; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-left: 6px; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg label { cursor: pointer; font-size: 13px; padding: 5px 10px; border-left: 1px solid var(--line); user-select: none; }
+.seg label:first-child { border-left: 0; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.verdict { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 14px 16px; }
+.total { font-family: var(--font-mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pill { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 99px; }
+.pill.good { background: var(--accent-soft); color: var(--good); }
+.pill.mid { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.none { background: var(--bg); color: var(--muted); }
+.rule { font-size: 13px; color: var(--muted); flex-basis: 100%; }
+textarea { width: 100%; min-height: 110px; font: inherit; font-size: 14px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; resize: vertical; }
+
+.flags { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+.flags div { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 14px; }
+.flags h4 { margin: 0 0 6px; font-size: 13px; }
+.flags .g h4 { color: var(--good); } .flags .b h4 { color: var(--bad); }
+.flags ul { margin: 0; padding-left: 18px; }
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; }
+.diagram svg { display: block; width: 100%; min-width: 760px; height: auto; font-family: var(--font-body); }
+.diagram .n rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+.diagram .n.key rect { stroke: var(--accent); fill: var(--accent-soft); }
+.diagram .n.key rect.stack { fill: var(--surface); stroke: var(--line); }
+.diagram .n.note rect { stroke-dasharray: 5 4; }
+.diagram .n.ok rect { stroke: var(--good); }
+.diagram .n.bad rect { stroke: var(--bad); fill: var(--bad-soft); }
+.diagram .tt { fill: var(--fg); font-size: 14px; font-weight: 600; text-anchor: middle; }
+.diagram .ts { fill: var(--muted); font-size: 12px; text-anchor: middle; }
+.diagram .tm { fill: var(--fg); font-family: var(--font-mono); font-size: 12px; font-weight: 600; text-anchor: middle; }
+.diagram .e line, .diagram .e2 { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+.diagram .e2 { stroke-dasharray: 4 3; }
+.diagram .ah { fill: var(--muted); }
+.diagram .el, .diagram .el text { fill: var(--accent); font-size: 11px; font-weight: 500; }
+.diagram .div { stroke: var(--line); stroke-width: 1; }
+.diagram .sec { fill: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+footer { padding-block: 24px 40px; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 560px) {
+  .crit { grid-template-columns: 1fr; }
+  .q dl { grid-template-columns: 1fr; }
+  .clock { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div class="wrap">
+    <div class="clock" id="clock">00:00</div>
+    <div class="now"><b id="nowTitle">Таймер не запущен</b><span id="nowGoal">Нажмите «Старт», когда отдадите задание кандидату</span></div>
+    <div class="btns">
+      <button id="startBtn" class="primary">Старт</button>
+      <button id="resetTimer">Сброс</button>
+    </div>
+    <div class="track" id="track"></div>
+  </div>
+</div>
+
+<main class="wrap">
+  <h1>Собеседование: платформа отложенных задач</h1>
+  <p class="sub">30 минут, системный аналитик. Проверяем, умеет ли кандидат решать задачи проектирования распределённых систем: уточнять, считать, строить модель состояний, думать об отказах.</p>
+
+  <h2>Текст задания для кандидата</h2>
+  <div class="task" id="taskText">
+    <p>Мы делаем внутреннюю платформу отложенных задач для сервисов компании. Примеры: «повторить списание через 24 часа», «отправить письмо завтра в 09:00», «каждый час запускать агрегацию».</p>
+    <p>Задача — скрипт (~100 КБ), который нужно запустить в заданное время. Выполняется от 1 секунды до 10 минут.</p>
+    <p>Требования:</p>
+    <ul>
+      <li>отказ любого сервера не должен приводить к потере задач;</li>
+      <li>каждая задача выполняется один раз или максимально близко к этому;</li>
+      <li>до 20 000 новых задач/с в пике, до 100 млн ожидающих задач;</li>
+      <li>в пике до 50 000 запусков/с;</li>
+      <li>задержка запуска: 95% &lt; 1 с.</li>
+    </ul>
+    <p>Предложите решение: из каких компонентов оно состоит, как хранятся задачи, как задача проходит путь от создания до завершения.</p>
+    <div class="row"><button id="copyTask">Скопировать текст</button></div>
+  </div>
+
+  <h2>Цифры для сверки</h2>
+  <div class="nums">
+    <div class="num"><code>20 000/с × 100 КБ</code><b>≈ 2 ГБ/с</b><span>Поток записи скриптов. Хранить в строке задачи нельзя.</span></div>
+    <div class="num"><code>100 млн × 100 КБ</code><b>≈ 10 ТБ</b><span>Скрипты в S3 по хешу, в задаче только ссылка. Cron-запуски делят один скрипт.</span></div>
+    <div class="num"><code>100 млн × ~0,5 КБ</code><b>≈ 50 ГБ</b><span>Метаданные без скрипта. Легко шардируется.</span></div>
+    <div class="num"><code>50 000/с × ~4 с</code><b>≈ 200 тыс.</b><span>Одновременно выполняющихся (закон Литтла). Короткие и длинные задачи — разные пулы.</span></div>
+  </div>
+
+  <h2>Ход интервью</h2>
+  <div id="phases"></div>
+
+  <h2>Оценка</h2>
+  <div class="score">
+    <div id="crits"></div>
+    <div class="verdict">
+      <span class="total" id="total">0 / 12</span>
+      <span class="pill none" id="verdict">Не оценено</span>
+      <span class="rule">Тянет уровень: ≥ 9 баллов, и «Расчёт» и «Модель состояний» раскрыты сам. Пограничный: 6–8. Ниже 6 — не тянет.</span>
+    </div>
+  </div>
+
+  <h2>Сигналы</h2>
+  <div class="flags">
+    <div class="g"><h4>Сильный кандидат</h4><ul>
+      <li>Сначала уточняет и считает, потом рисует</li>
+      <li>Сам видит проблему 100 КБ × 20 000/с</li>
+      <li>Говорит про at-least-once и идемпотентность</li>
+      <li>Сам предлагает политики: отмена, пропуски, повторы</li>
+      <li>Отделяет описание задачи от конкретного запуска</li>
+    </ul></div>
+    <div class="b"><h4>Красные флаги</h4><ul>
+      <li>Сразу «Kafka + БД + воркеры» без вопросов</li>
+      <li>Обещает exactly-once для внешних эффектов</li>
+      <li>Скрипт хранится в строке БД</li>
+      <li>Нет таймаута на выполнение скрипта</li>
+      <li>«SELECT раз в секунду» без мысли о нагрузке</li>
+    </ul></div>
+  </div>
+
+  <h2>Эталонная схема</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 960 640" role="img" aria-label="Схема платформы отложенных задач и модель статусов задачи">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+      </defs>
+
+      <!-- Clients -->
+      <g class="n"><rect x="20" y="40" width="160" height="110" rx="8"/>
+        <text x="100" y="66" class="tt">Сервисы</text>
+        <text x="100" y="90" class="ts">платежи</text>
+        <text x="100" y="108" class="ts">уведомления</text>
+        <text x="100" y="126" class="ts">аналитика</text></g>
+      <!-- API -->
+      <g class="n"><rect x="230" y="60" width="160" height="80" rx="8"/>
+        <text x="310" y="86" class="tt">API</text>
+        <text x="310" y="106" class="ts">create · cancel · status</text>
+        <text x="310" y="124" class="ts">идемпотентный create</text></g>
+      <!-- Task DB -->
+      <g class="n key"><rect x="450" y="40" width="180" height="100" rx="8"/>
+        <text x="540" y="66" class="tt">Task DB</text>
+        <text x="540" y="88" class="ts">шарды по hash(task_id)</text>
+        <text x="540" y="106" class="ts">индекс по времени запуска</text>
+        <text x="540" y="124" class="ts">~0,5 КБ на задачу</text></g>
+      <!-- Script store -->
+      <g class="n"><rect x="230" y="190" width="160" height="60" rx="8"/>
+        <text x="310" y="214" class="tt">Script Store (S3)</text>
+        <text x="310" y="234" class="ts">скрипт по хешу</text></g>
+      <!-- Coordinator -->
+      <g class="n"><rect x="720" y="40" width="220" height="70" rx="8"/>
+        <text x="830" y="66" class="tt">Координатор</text>
+        <text x="830" y="88" class="ts">etcd / ZK: lease + epoch</text></g>
+      <!-- Schedulers (stacked) -->
+      <g class="n key">
+        <rect x="732" y="172" width="208" height="100" rx="8" class="stack"/>
+        <rect x="726" y="176" width="208" height="100" rx="8" class="stack"/>
+        <rect x="720" y="180" width="208" height="100" rx="8"/>
+        <text x="824" y="204" class="tt">Scheduler × N</text>
+        <text x="824" y="224" class="ts">владеет своими шардами</text>
+        <text x="824" y="242" class="ts">окно 2 мин в памяти</text>
+        <text x="824" y="260" class="ts">CAS SCHEDULED → QUEUED</text></g>
+      <!-- Sweeper -->
+      <g class="n"><rect x="450" y="190" width="140" height="70" rx="8"/>
+        <text x="520" y="214" class="tt">Sweeper</text>
+        <text x="520" y="234" class="ts">истёк lease →</text>
+        <text x="520" y="250" class="ts">SCHEDULED</text></g>
+      <!-- Queue -->
+      <g class="n"><rect x="720" y="340" width="208" height="60" rx="8"/>
+        <text x="824" y="364" class="tt">Очередь (Kafka)</text>
+        <text x="824" y="384" class="ts">партиции по шардам</text></g>
+      <!-- Workers -->
+      <g class="n key"><rect x="450" y="330" width="200" height="90" rx="8"/>
+        <text x="550" y="354" class="tt">Workers</text>
+        <text x="550" y="374" class="ts">пулы: короткие / длинные</text>
+        <text x="550" y="392" class="ts">песочница, лимиты</text>
+        <text x="550" y="410" class="ts">таймаут 10 мин + kill</text></g>
+      <!-- Metrics -->
+      <g class="n note"><rect x="20" y="330" width="180" height="90" rx="8"/>
+        <text x="110" y="354" class="tt">Метрики и алерты</text>
+        <text x="110" y="374" class="ts">задержка запуска p95/p99</text>
+        <text x="110" y="392" class="ts">просроченные задачи</text>
+        <text x="110" y="410" class="ts">retry, FAILED, lease</text></g>
+
+      <!-- Edges -->
+      <g class="e">
+        <line x1="180" y1="100" x2="228" y2="100" marker-end="url(#ar)"/>
+        <line x1="390" y1="100" x2="448" y2="100" marker-end="url(#ar)"/>
+        <line x1="310" y1="140" x2="310" y2="188" marker-end="url(#ar)"/>
+        <line x1="830" y1="110" x2="830" y2="168" marker-end="url(#ar)"/>
+        <line x1="630" y1="120" x2="718" y2="200" marker-start="url(#ar)" marker-end="url(#ar)"/>
+        <line x1="520" y1="190" x2="520" y2="142" marker-end="url(#ar)"/>
+        <line x1="824" y1="280" x2="824" y2="338" marker-end="url(#ar)"/>
+        <line x1="720" y1="370" x2="652" y2="370" marker-end="url(#ar)"/>
+        <line x1="620" y1="330" x2="620" y2="142" marker-end="url(#ar)"/>
+        <line x1="450" y1="350" x2="372" y2="252" marker-end="url(#ar)"/>
+      </g>
+      <g class="el">
+        <text x="318" y="170">скрипт</text>
+        <text x="838" y="144">lease на шарды</text>
+        <text x="628" y="296">heartbeat,</text>
+        <text x="628" y="310">статус</text>
+        <text x="400" y="312" text-anchor="end">скрипт по ссылке</text>
+      </g>
+
+      <!-- State machine -->
+      <line x1="20" y1="450" x2="940" y2="450" class="div"/>
+      <text x="20" y="478" class="sec">Статусы задачи</text>
+      <path d="M520,515 V497 H90 V513" class="e2" marker-end="url(#ar)"/>
+      <text x="305" y="490" class="el" text-anchor="middle">ошибка или истёк lease → backoff</text>
+
+      <g class="n st"><rect x="20" y="515" width="140" height="40" rx="6"/><text x="90" y="540" class="tm">SCHEDULED</text></g>
+      <g class="n st"><rect x="250" y="515" width="120" height="40" rx="6"/><text x="310" y="540" class="tm">QUEUED</text></g>
+      <g class="n st key"><rect x="460" y="515" width="120" height="40" rx="6"/><text x="520" y="540" class="tm">RUNNING</text></g>
+      <g class="n st ok"><rect x="680" y="505" width="180" height="32" rx="6"/><text x="770" y="526" class="tm">SUCCEEDED</text></g>
+      <g class="n st bad"><rect x="680" y="548" width="180" height="32" rx="6"/><text x="770" y="569" class="tm">FAILED · лимит попыток</text></g>
+      <g class="n st"><rect x="250" y="590" width="120" height="32" rx="6"/><text x="310" y="611" class="tm">CANCELLED</text></g>
+
+      <g class="e">
+        <line x1="160" y1="535" x2="248" y2="535" marker-end="url(#ar)"/>
+        <line x1="370" y1="535" x2="458" y2="535" marker-end="url(#ar)"/>
+        <line x1="580" y1="528" x2="678" y2="521" marker-end="url(#ar)"/>
+        <line x1="580" y1="545" x2="678" y2="564" marker-end="url(#ar)"/>
+        <line x1="90" y1="555" x2="248" y2="604" marker-end="url(#ar)"/>
+        <line x1="310" y1="555" x2="310" y2="588" marker-end="url(#ar)"/>
+      </g>
+      <g class="el">
+        <text x="204" y="528" text-anchor="middle">Scheduler</text>
+        <text x="414" y="528" text-anchor="middle">Worker</text>
+        <text x="630" y="516" text-anchor="middle">Worker</text>
+        <text x="150" y="600" text-anchor="middle">отмена</text>
+      </g>
+    </svg>
+  </div>
+
+  <h2>Заметки</h2>
+  <textarea id="notes" placeholder="Имя кандидата, ключевые цитаты, что раскрыл сам, где понадобилась подсказка"></textarea>
+  <div style="display:flex;justify-content:flex-end;margin-top:10px">
+    <button id="resetAll" class="danger">Новый кандидат: очистить всё</button>
+  </div>
+</main>
+
+<footer class="wrap">Отметки, оценка и заметки хранятся только в этом браузере.</footer>
+
+<script>
+const PHASES = [
+  { from: 0, to: 3, title: "Чтение задания", goal: "Молча ждём. Отметьте, задаёт ли вопросы сразу.", qs: [] },
+  { from: 3, to: 8, title: "Уточнения и оценка", goal: "Задаёт ли вопросы до решения, считает ли цифры",
+    hint: "На 5-й минуте, если молчит: «Что бы вы уточнили у заказчика? Прикиньте объёмы».",
+    qs: [
+      { id: "q1", ask: "Сколько данных в секунду и всего?",
+        ok: "2 ГБ/с и 10 ТБ → скрипт отдельно (объектное хранилище, дедупликация по хешу), в задаче ссылка.",
+        no: "Цифры не считает или считает без выводов." },
+      { id: "q2", ask: "Что уточнили бы у заказчика?",
+        ok: "Кто клиенты и как создают задачи; что значит «один раз»; что делать при ошибке скрипта; нужна ли отмена.",
+        no: "Сразу рисует архитектуру." }
+    ] },
+  { from: 8, to: 17, title: "Решение", goal: "Компоненты, хранение, модель состояний задачи",
+    qs: [
+      { id: "q3", ask: "Нарисуйте статусы задачи и кто переводит её между ними.",
+        ok: "SCHEDULED → QUEUED → RUNNING → SUCCEEDED / FAILED, плюс возврат в SCHEDULED при повторе. У каждого перехода есть исполнитель.",
+        no: "«Задача выполнилась» без статусов." },
+      { id: "q4", ask: "Как найти задачи, которым пора запускаться, среди 100 млн?",
+        ok: "Индекс по времени или временные корзины, шардирование по task_id, окно ближайших минут в памяти.",
+        no: "SELECT раз в секунду без мысли о нагрузке." },
+      { id: "q5", ask: "Пример «каждый час»: что хранится в системе?",
+        ok: "Описание задачи (расписание) отдельно от конкретного запуска; следующий запуск создаётся из расписания.",
+        no: "Одна строка, которую перезаписывают." }
+    ] },
+  { from: 17, to: 25, title: "Отказы", goal: "Понимание надёжности. По 2–3 минуты на вопрос.",
+    qs: [
+      { id: "q6", ask: "Работают 5 инстансов планировщика. Как не запустить одну задачу пять раз?",
+        ok: "Захват с таймаутом (lease) или распределение шардов между инстансами. Захват атомарный (CAS по статусу).",
+        no: "«Поставим один инстанс» или «распределённая блокировка на всё»." },
+      { id: "q7", ask: "Воркер упал или завис посреди выполнения. Что будет?",
+        ok: "Heartbeat + жёсткий таймаут, повторный запуск.",
+        hint: "Добить: «А если он не упал, а просто медленный?» → дубль → идемпотентность на стороне сервиса (ключ запуска).",
+        no: "Нет таймаута или обещает exactly-once." },
+      { id: "q8", ask: "Скрипт упал с ошибкой. Как устроить повторы?",
+        ok: "Счётчик попыток, экспоненциальный backoff через то же поле времени запуска, лимит, терминальный статус + алерт. Различает повторяемые и неповторяемые ошибки.",
+        no: "Бесконечные повторы или повтор сразу." }
+    ] },
+  { from: 25, to: 30, title: "Усложнение", goal: "Работа с изменением требований. Выберите одно.",
+    qs: [
+      { id: "q9", ask: "Нужна отмена задачи.", pick: "рекомендую",
+        ok: "Разбирает гонки: ждёт / в очереди / выполняется. Отмена до старта — атомарная смена статуса, во время выполнения — сигнал воркеру. API честно отвечает «отменено» или «уже стартовала».",
+        no: "«Удалим из очереди» без учёта гонок." },
+      { id: "q10", ask: "Нужно cron-расписание.", pick: "альтернатива",
+        ok: "Система лежала час — пропустить, выполнить один раз или догнать все? Прошлый запуск ещё идёт — запускать следующий? Уточняет у заказчика.",
+        no: "Не видит этих вопросов." }
+    ] }
+];
+
+const CRITS = [
+  { id: "c1", name: "Уточнения", desc: "Задаёт вопросы до решения" },
+  { id: "c2", name: "Расчёт", desc: "Считает объёмы и делает выводы", key: true },
+  { id: "c3", name: "Решение", desc: "Компоненты, хранение, поиск задач к запуску" },
+  { id: "c4", name: "Модель состояний", desc: "Статусы, переходы, кто их выполняет", key: true },
+  { id: "c5", name: "Надёжность", desc: "Отказы, at-least-once, идемпотентность" },
+  { id: "c6", name: "Требования", desc: "Сам выходит на политики при усложнении" }
+];
+const LEVELS = [["0", "нет"], ["1", "с подсказкой"], ["2", "сам"]];
+const KEY = "scheduler-interview-v1";
+const TOTAL_MIN = 30;
+
+let state = { checks: {}, scores: {}, notes: "", startedAt: null, pausedElapsed: 0 };
+try { const s = JSON.parse(localStorage.getItem(KEY)); if (s) state = Object.assign(state, s); } catch (e) {}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+// Phases
+const phasesEl = document.getElementById("phases");
+phasesEl.innerHTML = PHASES.map((p, i) => `
+  <section class="phase" id="ph${i}">
+    <header><span class="t">${String(p.from).padStart(2,"0")}–${String(p.to).padStart(2,"0")} мин</span><h3>${p.title}</h3><span class="goal">${p.goal}</span></header>
+    ${p.hint ? `<div class="q"><span></span><div class="body"><dl><dt class="hint">Подсказка</dt><dd>${esc(p.hint)}</dd></dl></div></div>` : ""}
+    ${p.qs.map(q => `
+      <div class="q" id="row-${q.id}">
+        <input type="checkbox" id="${q.id}" aria-label="Вопрос задан">
+        <div class="body">
+          <label class="ask" for="${q.id}">${esc(q.ask)}${q.pick ? ` <span class="pick">(${q.pick})</span>` : ""}</label>
+          <dl>
+            <dt class="ok">Ожидаем</dt><dd>${esc(q.ok)}</dd>
+            ${q.hint ? `<dt class="hint">Добить</dt><dd>${esc(q.hint)}</dd>` : ""}
+            <dt class="no">Слабо</dt><dd>${esc(q.no)}</dd>
+          </dl>
+        </div>
+      </div>`).join("")}
+  </section>`).join("");
+
+PHASES.flatMap(p => p.qs).forEach(q => {
+  const cb = document.getElementById(q.id), row = document.getElementById("row-" + q.id);
+  cb.checked = !!state.checks[q.id]; row.classList.toggle("done", cb.checked);
+  cb.addEventListener("change", () => { state.checks[q.id] = cb.checked; row.classList.toggle("done", cb.checked); save(); });
+});
+
+// Scoring
+const critsEl = document.getElementById("crits");
+critsEl.innerHTML = CRITS.map(c => `
+  <div class="crit">
+    <div><span class="name">${c.name}</span>${c.key ? '<span class="key">ключевой</span>' : ""}<div class="desc">${c.desc}</div></div>
+    <div class="seg" role="radiogroup" aria-label="${c.name}">
+      ${LEVELS.map(([v, t]) => `<label><input type="radio" name="${c.id}" id="${c.id}-${v}" value="${v}">${t}</label>`).join("")}
+    </div>
+  </div>`).join("");
+CRITS.forEach(c => {
+  if (state.scores[c.id] != null) { const r = document.getElementById(`${c.id}-${state.scores[c.id]}`); if (r) r.checked = true; }
+  document.getElementsByName(c.id).forEach(r => r.addEventListener("change", () => { state.scores[c.id] = r.value; save(); renderScore(); }));
+});
+function renderScore() {
+  const vals = CRITS.map(c => state.scores[c.id]);
+  const sum = vals.reduce((a, v) => a + (v ? +v : 0), 0);
+  document.getElementById("total").textContent = `${sum} / 12`;
+  const v = document.getElementById("verdict");
+  if (vals.some(x => x == null)) { v.className = "pill none"; v.textContent = `Оценено ${vals.filter(x => x != null).length} из 6`; return; }
+  const keysOk = state.scores.c2 === "2" && state.scores.c4 === "2";
+  if (sum >= 9 && keysOk) { v.className = "pill good"; v.textContent = "Тянет уровень"; }
+  else if (sum >= 6) { v.className = "pill mid"; v.textContent = sum >= 9 ? "Пограничный: ключевые не сам" : "Пограничный"; }
+  else { v.className = "pill bad"; v.textContent = "Не тянет"; }
+}
+renderScore();
+
+// Notes
+const notes = document.getElementById("notes");
+notes.value = state.notes || "";
+notes.addEventListener("input", () => { state.notes = notes.value; save(); });
+
+// Copy task
+document.getElementById("copyTask").addEventListener("click", e => {
+  const el = document.getElementById("taskText").cloneNode(true);
+  el.querySelector(".row").remove();
+  const text = el.innerText.trim(); const btn = e.currentTarget;
+  navigator.clipboard.writeText(text).then(() => { btn.textContent = "Скопировано"; setTimeout(() => btn.textContent = "Скопировать текст", 1500); })
+    .catch(() => { const r = document.createRange(); r.selectNodeContents(document.getElementById("taskText")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "Выделено, нажмите ⌘C"; });
+});
+
+// Timer
+const track = document.getElementById("track");
+track.innerHTML = PHASES.map(p => `<div style="flex:${p.to - p.from}"><i></i></div>`).join("");
+const clock = document.getElementById("clock"), startBtn = document.getElementById("startBtn");
+const nowTitle = document.getElementById("nowTitle"), nowGoal = document.getElementById("nowGoal");
+function elapsed() { return state.pausedElapsed + (state.startedAt ? Date.now() - state.startedAt : 0); }
+function tick() {
+  const ms = elapsed(), min = ms / 60000;
+  const m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60;
+  clock.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  clock.classList.toggle("over", min >= TOTAL_MIN);
+  let cur = -1;
+  PHASES.forEach((p, i) => {
+    const fill = Math.max(0, Math.min(1, (min - p.from) / (p.to - p.from)));
+    track.children[i].firstElementChild.style.width = (fill * 100) + "%";
+    const active = ms > 0 && min >= p.from && min < p.to;
+    if (active) cur = i;
+    document.getElementById("ph" + i).classList.toggle("active", active);
+  });
+  if (ms === 0) { nowTitle.textContent = "Таймер не запущен"; nowGoal.textContent = "Нажмите «Старт», когда отдадите задание кандидату"; }
+  else if (cur >= 0) { const p = PHASES[cur]; const left = Math.max(0, p.to * 60000 - ms); nowTitle.textContent = `${p.title} · до перехода ${Math.floor(left/60000)}:${String(Math.floor(left/1000)%60).padStart(2,"0")}`; nowGoal.textContent = p.goal; }
+  else { nowTitle.textContent = "Время вышло"; nowGoal.textContent = "Заполните оценку, пока свежо"; }
+  startBtn.textContent = state.startedAt ? "Пауза" : (ms > 0 ? "Продолжить" : "Старт");
+}
+startBtn.addEventListener("click", () => {
+  if (state.startedAt) { state.pausedElapsed = elapsed(); state.startedAt = null; }
+  else { state.startedAt = Date.now(); }
+  save(); tick();
+});
+document.getElementById("resetTimer").addEventListener("click", () => { state.startedAt = null; state.pausedElapsed = 0; save(); tick(); });
+setInterval(tick, 500); tick();
+
+// Reset all (two-step)
+const resetAll = document.getElementById("resetAll"); let armed = null;
+resetAll.addEventListener("click", () => {
+  if (!armed) { resetAll.textContent = "Точно очистить? Нажмите ещё раз"; armed = setTimeout(() => { armed = null; resetAll.textContent = "Новый кандидат: очистить всё"; }, 3000); return; }
+  clearTimeout(armed); armed = null;
+  state = { checks: {}, scores: {}, notes: "", startedAt: null, pausedElapsed: 0 }; save();
+  document.querySelectorAll('.q input[type=checkbox]').forEach(cb => { cb.checked = false; cb.closest(".q").classList.remove("done"); });
+  document.querySelectorAll('.seg input').forEach(r => r.checked = false);
+  notes.value = ""; resetAll.textContent = "Новый кандидат: очистить всё"; renderScore(); tick();
+});
+</script>
+</body>
+</html>
